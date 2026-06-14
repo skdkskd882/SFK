@@ -5,10 +5,10 @@ local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
--- Fluent UI 로드
+-- UI 로딩 안전장치
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
--- [데이터 저장 시스템]
+-- 데이터 저장 시스템 (v4)
 local SaveFile = "OmniscientCore_v4_Data.json"
 local Config = { Name = "노스니", Skin = "골드 스킨" }
 
@@ -20,7 +20,7 @@ local function Save()
     if writefile then writefile(SaveFile, HttpService:JSONEncode(Config)) end
 end
 
--- [UI 설정 - v4 적용]
+-- UI 생성
 local Window = Fluent:CreateWindow({
     Title = "🌌 OMNISCIENT CORE v4",
     SubTitle = "최종 통합 안정화 에디션",
@@ -37,7 +37,7 @@ local Tabs = {
 }
 
 --------------------------------------------------------------------------
--- 1. 에임봇 시스템
+-- 1. 에임봇 시스템 (사일런트)
 --------------------------------------------------------------------------
 Tabs.Tab1:AddToggle("HeadLock", {Title = "사일런트 헤드락 (ON/OFF)", Default = false}):OnChanged(function(v) getgenv().HeadLock = v end)
 
@@ -75,7 +75,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 --------------------------------------------------------------------------
--- 3. 데이터 및 스킨 시스템 (v4 저장)
+-- 3. 데이터 및 스킨 시스템
 --------------------------------------------------------------------------
 Tabs.Tab3:AddDropdown("NameChange", {
     Title = "닉네임 변조 (v4 저장)",
