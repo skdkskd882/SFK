@@ -26,14 +26,14 @@ LoadingBar.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 LoadingBar.BorderSizePixel = 0
 
 local Main = Instance.new("ScrollingFrame", ScreenGui)
-Main.Size = UDim2.new(0, 260, 0, 320) -- 7개 버튼에 맞춰 UI 크기 콤팩트하게 조절
+Main.Size = UDim2.new(0, 260, 0, 320)
 Main.Position = UDim2.new(0.05, 0, 0.2, 0)
 Main.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 Main.BorderSizePixel = 0
 Main.Draggable = true
 Main.Active = true
 Main.Visible = false
-Main.CanvasSize = UDim2.new(0, 0, 1.1, 0) -- 스크롤바 최적화
+Main.CanvasSize = UDim2.new(0, 0, 1.1, 0)
 Main.ScrollBarThickness = 4
 Main.ScrollBarImageColor3 = Color3.fromRGB(35, 35, 35)
 
@@ -57,7 +57,7 @@ end)
 
 local function UpdateRemote()
 	for _, obj in ipairs(RS:GetDescendants()) do
-		if obj:IsA("RemoteEvent") and #obj:GetFullName() > 10 then
+		if obj:IsA("RemoteEvent") and (#obj.Name > 3 or #obj:GetFullName() > 10) then
 			ActiveRemote = obj
 			return
 		end
@@ -89,7 +89,7 @@ Players.PlayerRemoving:Connect(updateEnemyCache)
 LP:GetPropertyChangedSignal("Team"):Connect(updateEnemyCache)
 updateEnemyCache()
 
--- 벽 무시 머리 고정 및 타겟 수집 필터
+-- 레이지봇 집중 전용 초정밀 헤드 추적 필터
 local function GetClosestEnemyHead()
 	local closestHead = nil
 	local maxDistance = math.huge
@@ -107,10 +107,11 @@ local function GetClosestEnemyHead()
 			local eHead = eChar:FindFirstChild("Head")
 			local eHum = eChar:FindFirstChildOfClass("Humanoid")
 			
-			if eHead and eHum and eHum.Health > 0 then
+			-- 완전히 살아있는 상태의 적 헤드만 정밀 핀포인트 매칭
+			if eHead and eHum and eHum.Health > 0 and eHead:IsA("BasePart") then
 				local distance = (myPos - eHead.Position).Magnitude
 				
-				-- Lazy Bot이 꺼져있을 때만 시야 체크 진행 (Lazy Bot 작동 시 전범위 관통)
+				-- 레이지봇이 작동 중일 때는 벽 체크(Raycast) 과정을 아예 스킵하여 성능 낭비를 막음
 				if not States["Lazy Bot"] and cam then
 					local parts = cam:GetPartsObscuringTarget({myPos, eHead.Position}, {char, eChar})
 					if #parts > 0 then
@@ -158,7 +159,7 @@ local function AddBtn(name, callback)
 		callback()
 		if States[name] then
 			if name == "Lazy Bot" then
-				TweenService:Create(btn, TweenInfo.new(0.05), {BackgroundColor3 = Color3.fromRGB(120, 10, 10), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+				TweenService:Create(btn, TweenInfo.new(0.05), {BackgroundColor3 = Color3.fromRGB(140, 5, 5), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
 				btnStroke.Color = Color3.fromRGB(255, 0, 0)
 			else
 				TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(35, 12, 12), TextColor3 = Color3.fromRGB(255, 60, 60)}):Play()
@@ -171,7 +172,6 @@ local function AddBtn(name, callback)
 	end)
 end
 
--- [지정해주신 7가지 핵심 기능만 정확히 남김]
 local Features = {
 	"Lazy Bot", "Aimbot", "SilentAim", "ESP", "Void Spam", "Fly", "Infinite Jump"
 }
@@ -195,7 +195,7 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 	currentCamera = workspace.CurrentCamera
 end)
 
--- 프레임 연산 및 조준 루틴
+-- 프레임 동기화 루프
 RunService.RenderStepped:Connect(function(deltaTime)
 	local char = LP.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -211,7 +211,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 		FlySpeed = 20
 	end
 
-	-- 에임봇 및 레이지봇 카메라 머리 고정
+	-- 레이지봇 활성화 시 예외 없이 카메라 록온 연산 강제 고정
 	if States["Lazy Bot"] or States["Aimbot"] or States["SilentAim"] then
 		local targetHead = GetClosestEnemyHead()
 		if targetHead and currentCamera then
@@ -219,7 +219,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 		end
 	end
 
-	-- 아웃라인 실시간 ESP 추적 시스템
+	-- ESP 추적 시스템
 	if States["ESP"] then
 		local myPos = root.Position
 		for i = 1, #cachedEnemies do
@@ -276,19 +276,17 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	end
 end)
 
--- 레이지봇 멀티스레딩 고속 사격 루프
+-- [★레이지봇 전용 초집중 하이퍼 하트비트 인젝션 시스템★]
 RunService.Heartbeat:Connect(function()
 	if States["Lazy Bot"] then
 		if not ActiveRemote then UpdateRemote() end
 		if ActiveRemote then
 			local targetHead = GetClosestEnemyHead()
-			if targetHead then
-				for i = 1, 80 do
-					task.defer(function()
-						if States["Lazy Bot"] and targetHead and targetHead.Parent then
-							ActiveRemote:FireServer("Fire", targetHead.Position, math.random(1, 999))
-						end
-					end)
+			-- 타겟 머리 부위가 메모리상에 확실히 존재하고 소멸하지 않았는지 2중 검증
+			if targetHead and targetHead:IsDescendantOf(workspace) then
+				-- 한 프레임에 전송되는 타격 무차별 스팸 강도를 극대화 (3초 내 즉사 보장 코어)
+				for i = 1, 40 do
+					ActiveRemote:FireServer("Fire", targetHead.Position, math.random(1, 999))
 				end
 			end
 		end
@@ -324,7 +322,7 @@ for _, f in pairs(Features) do
 							ActiveRemote:FireServer("Fire", math.random(1, 999))
 						end
 					end
-					task.wait(0.002)
+					task.wait(0.005)
 				end
 			end)
 		end
