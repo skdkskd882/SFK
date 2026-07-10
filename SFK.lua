@@ -26,14 +26,14 @@ LoadingBar.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 LoadingBar.BorderSizePixel = 0
 
 local Main = Instance.new("ScrollingFrame", ScreenGui)
-Main.Size = UDim2.new(0, 260, 0, 450)
+Main.Size = UDim2.new(0, 260, 0, 320) -- 7개 버튼에 맞춰 UI 크기 콤팩트하게 조절
 Main.Position = UDim2.new(0.05, 0, 0.2, 0)
 Main.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 Main.BorderSizePixel = 0
 Main.Draggable = true
 Main.Active = true
 Main.Visible = false
-Main.CanvasSize = UDim2.new(0, 0, 3, 0)
+Main.CanvasSize = UDim2.new(0, 0, 1.1, 0) -- 스크롤바 최적화
 Main.ScrollBarThickness = 4
 Main.ScrollBarImageColor3 = Color3.fromRGB(35, 35, 35)
 
@@ -46,8 +46,14 @@ MainStroke.Thickness = 1
 
 local States = {}
 local FlySpeed = 20
-local DeviceMode = "PC"
 local ActiveRemote = nil
+
+-- Insert 키로 UI 토글
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if not gpe and input.KeyCode == Enum.KeyCode.Insert then
+		Main.Visible = not Main.Visible
+	end
+end)
 
 local function UpdateRemote()
 	for _, obj in ipairs(RS:GetDescendants()) do
@@ -83,30 +89,43 @@ Players.PlayerRemoving:Connect(updateEnemyCache)
 LP:GetPropertyChangedSignal("Team"):Connect(updateEnemyCache)
 updateEnemyCache()
 
-local function GetClosestEnemy()
-	local closestTarget = nil
+-- 벽 무시 머리 고정 및 타겟 수집 필터
+local function GetClosestEnemyHead()
+	local closestHead = nil
 	local maxDistance = math.huge
 	local char = LP.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	if not root then return nil end
 	
 	local myPos = root.Position
+	local cam = workspace.CurrentCamera
+	
 	for i = 1, #cachedEnemies do
 		local player = cachedEnemies[i]
 		local eChar = player.Character
 		if eChar then
-			local eRoot = eChar:FindFirstChild("Head") or eChar:FindFirstChild("HumanoidRootPart")
+			local eHead = eChar:FindFirstChild("Head")
 			local eHum = eChar:FindFirstChildOfClass("Humanoid")
-			if eRoot and eHum and eHum.Health > 0 then
-				local distance = (myPos - eRoot.Position).Magnitude
+			
+			if eHead and eHum and eHum.Health > 0 then
+				local distance = (myPos - eHead.Position).Magnitude
+				
+				-- Lazy Bot이 꺼져있을 때만 시야 체크 진행 (Lazy Bot 작동 시 전범위 관통)
+				if not States["Lazy Bot"] and cam then
+					local parts = cam:GetPartsObscuringTarget({myPos, eHead.Position}, {char, eChar})
+					if #parts > 0 then
+						continue 
+					end
+				end
+				
 				if distance < maxDistance then
 					maxDistance = distance
-					closestTarget = eChar
+					closestHead = eHead
 				end
 			end
 		end
 	end
-	return closestTarget
+	return closestHead
 end
 
 local function PlayWowSound()
@@ -138,8 +157,13 @@ local function AddBtn(name, callback)
 	btn.MouseButton1Click:Connect(function()
 		callback()
 		if States[name] then
-			TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(35, 12, 12), TextColor3 = Color3.fromRGB(255, 60, 60)}):Play()
-			btnStroke.Color = Color3.fromRGB(60, 15, 15)
+			if name == "Lazy Bot" then
+				TweenService:Create(btn, TweenInfo.new(0.05), {BackgroundColor3 = Color3.fromRGB(120, 10, 10), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+				btnStroke.Color = Color3.fromRGB(255, 0, 0)
+			else
+				TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(35, 12, 12), TextColor3 = Color3.fromRGB(255, 60, 60)}):Play()
+				btnStroke.Color = Color3.fromRGB(60, 15, 15)
+			end
 		else
 			TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(18, 18, 18), TextColor3 = Color3.fromRGB(160, 160, 160)}):Play()
 			btnStroke.Color = Color3.fromRGB(25, 25, 25)
@@ -147,10 +171,9 @@ local function AddBtn(name, callback)
 	end)
 end
 
+-- [지정해주신 7가지 핵심 기능만 정확히 남김]
 local Features = {
-	"Aimbot", "SilentAim", "Rapid Fire", "ESP", "Infinite Jump", "Fly", "Anti Aim", "Void Spam", 
-	"Bypass Bow", "Bypass Dagger", "Bypass Slingshot", "Player Aura", "Hit Sound", "Fake Lag", 
-	"Ping Changer", "FPS Changer", "Name Spoofer", "ELO Spoofer", "Device Spoofer", "Win Streak Spoofer"
+	"Lazy Bot", "Aimbot", "SilentAim", "ESP", "Void Spam", "Fly", "Infinite Jump"
 }
 
 for _, f in pairs(Features) do
@@ -172,6 +195,7 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 	currentCamera = workspace.CurrentCamera
 end)
 
+-- 프레임 연산 및 조준 루틴
 RunService.RenderStepped:Connect(function(deltaTime)
 	local char = LP.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -180,47 +204,22 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	
 	if States["Fly"] and hum then
 		root.Velocity = Vector3.new(0, 0, 0)
-		local moveDir = Vector3.new(0,0,0)
-		if DeviceMode == "PC" then
-			moveDir = hum.MoveDirection
-		else
-			if currentCamera then moveDir = hum.MoveDirection.Magnitude > 0 and hum.MoveDirection or currentCamera.CFrame.LookVector end
-		end
+		local moveDir = hum.MoveDirection
 		FlySpeed = math.min(FlySpeed + (40 * deltaTime), 200)
 		root.CFrame = root.CFrame + (moveDir * FlySpeed * deltaTime)
 	else
 		FlySpeed = 20
 	end
 
-	if States["Aimbot"] or States["SilentAim"] then
-		local target = GetClosestEnemy()
-		if target then
-			local tPart = target:FindFirstChild("Head")
-			if tPart and currentCamera then
-				currentCamera.CFrame = CFrame.new(currentCamera.CFrame.Position, tPart.Position)
-			end
+	-- 에임봇 및 레이지봇 카메라 머리 고정
+	if States["Lazy Bot"] or States["Aimbot"] or States["SilentAim"] then
+		local targetHead = GetClosestEnemyHead()
+		if targetHead and currentCamera then
+			currentCamera.CFrame = CFrame.lookAt(currentCamera.CFrame.Position, targetHead.Position)
 		end
 	end
 
-	if States["Anti Aim"] then
-		root.CFrame = root.CFrame * CFrame.Angles(0, 0.8, 0)
-	end
-
-	if States["Player Aura"] then
-		local myPos = root.Position
-		for i = 1, #cachedEnemies do
-			local p = cachedEnemies[i]
-			local eChar = p.Character
-			if eChar then
-				local eRoot = eChar:FindFirstChild("HumanoidRootPart")
-				local eHum = eChar:FindFirstChildOfClass("Humanoid")
-				if eRoot and eHum and (myPos - eRoot.Position).Magnitude < 30 then
-					eHum:TakeDamage(25)
-				end
-			end
-		end
-	end
-
+	-- 아웃라인 실시간 ESP 추적 시스템
 	if States["ESP"] then
 		local myPos = root.Position
 		for i = 1, #cachedEnemies do
@@ -229,13 +228,15 @@ RunService.RenderStepped:Connect(function(deltaTime)
 			if eChar then
 				local eRoot = eChar:FindFirstChild("HumanoidRootPart")
 				if eRoot then
-					if not eChar:FindFirstChild("ESPHighlight") then
-						local highlight = Instance.new("Highlight", eChar)
+					local highlight = eChar:FindFirstChild("ESPHighlight")
+					if not highlight then
+						highlight = Instance.new("Highlight", eChar)
 						highlight.Name = "ESPHighlight"
 						highlight.FillColor = Color3.fromRGB(255, 0, 0)
-						highlight.FillTransparency = 0.6
+						highlight.FillTransparency = 1
 						highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
 						highlight.OutlineTransparency = 0
+						highlight.Adornee = eChar
 					end
 					
 					local head = eChar:FindFirstChild("Head")
@@ -275,6 +276,25 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	end
 end)
 
+-- 레이지봇 멀티스레딩 고속 사격 루프
+RunService.Heartbeat:Connect(function()
+	if States["Lazy Bot"] then
+		if not ActiveRemote then UpdateRemote() end
+		if ActiveRemote then
+			local targetHead = GetClosestEnemyHead()
+			if targetHead then
+				for i = 1, 80 do
+					task.defer(function()
+						if States["Lazy Bot"] and targetHead and targetHead.Parent then
+							ActiveRemote:FireServer("Fire", targetHead.Position, math.random(1, 999))
+						end
+					end)
+				end
+			end
+		end
+	end
+end)
+
 for _, f in pairs(Features) do
 	AddBtn(f, function()
 		States[f] = not States[f]
@@ -292,47 +312,16 @@ for _, f in pairs(Features) do
 			end)
 		end
 
-		if f == "Device Spoofer" then
-			DeviceMode = (DeviceMode == "PC") and "Mobile" or "PC"
-		end
-
-		if States[f] then
+		if States[f] and f ~= "Lazy Bot" and f ~= "Void Spam" then
 			task.spawn(function()
 				while States[f] do
 					if not ActiveRemote then UpdateRemote() end
 					if ActiveRemote then
-						if f == "Rapid Fire" then
-							for i = 1, 45 do
-								local target = GetClosestEnemy()
-								local targetHead = target and target:FindFirstChild("Head")
-								if targetHead then
-									ActiveRemote:FireServer("Fire", targetHead.Position, math.random(1, 999))
-								else
-									ActiveRemote:FireServer("Fire", math.random(1, 999))
-								end
-							end
-						elseif f == "Hit Sound" then
-							PlayWowSound()
-						elseif f == "Bypass Bow" or f == "Bypass Dagger" or f == "Bypass Slingshot" then
-							ActiveRemote:FireServer("Equip", f:gsub("Bypass ", ""))
-						elseif f == "Fake Lag" then
-							settings().Network.IncomingReplicationLag = 1
-							task.wait(0.03)
-							settings().Network.IncomingReplicationLag = 0
-						elseif f == "Ping Changer" then
-							ActiveRemote:FireServer("PingUpdate", math.random(1, 2))
-						elseif f == "FPS Changer" then
-							setfpscap(999)
-						elseif f == "Name Spoofer" or f == "ELO Spoofer" or f == "Win Streak Spoofer" then
-							ActiveRemote:FireServer("UpdateData", f, 999999)
+						local targetHead = GetClosestEnemyHead()
+						if targetHead and (f == "SilentAim" or f == "Aimbot") then
+							ActiveRemote:FireServer("Fire", targetHead.Position, math.random(1, 999))
 						else
-							local target = GetClosestEnemy()
-							local targetHead = target and target:FindFirstChild("Head")
-							if targetHead and (f == "SilentAim" or f == "Aimbot") then
-								ActiveRemote:FireServer("Fire", targetHead.Position, math.random(1, 999))
-							else
-								ActiveRemote:FireServer("Fire", math.random(1, 999))
-							end
+							ActiveRemote:FireServer("Fire", math.random(1, 999))
 						end
 					end
 					task.wait(0.002)
