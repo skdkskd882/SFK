@@ -1,47 +1,67 @@
--- RIVALS ELITE | UNIVERSAL ENGINE (PC & MOBILE COMPATIBLE)
+-- RIVALS ELITE | ULTIMATE MASTER ENGINE (WITH UI TOGGLE)
 local g = game
 local lp = g:GetService("Players").LocalPlayer
 local rs = g:GetService("RunService")
+local UIS = g:GetService("UserInputService")
 
--- [1] 환경 감지 및 라이브러리 호환성 확보
-local isMobile = g:GetService("UserInputService").TouchEnabled
-local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua'))()
-local SaveManager = loadstring(game:HttpGet('https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua'))()
-local ThemeManager = loadstring(game:HttpGet('https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua'))()
+-- [1] 라이브러리 및 에드온
+local Library = loadstring(g:HttpGet('https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua'))()
+local SaveManager = loadstring(g:HttpGet('https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/SaveManager.lua'))()
+local ThemeManager = loadstring(g:HttpGet('https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/addons/ThemeManager.lua'))()
 
 -- [2] 윈도우 생성
-local Window = Library:CreateWindow({Title = 'Rivals Elite | Multi-Platform', Center = true, AutoShow = true})
+local Window = Library:CreateWindow({Title = 'Rivals Elite | Master Engine', Center = true, AutoShow = true, Size = UDim2.fromOffset(500, 400)})
 
--- [3] 탭 구성
-local Tabs = {
-    Combat = Window:AddTab('Combat'),
-    Movement = Window:AddTab('Movement'),
-    Settings = Window:AddTab('Settings')
-}
+-- [3] UI 토글 시스템 (Keybind 연동)
+-- 설정 탭에 UI 토글 키바인드 추가
+local SettingsTab = Window:AddTab('Settings')
+local ToggleGroup = SettingsTab:AddLeftGroupbox('Menu Settings')
 
--- [4] 기능 정의 (범용 함수)
-local CombatGroup = Tabs.Combat:AddLeftGroupbox('Combat')
-CombatGroup:AddToggle('AimEnabled', {Text = 'All Head Aimbot'})
-CombatGroup:AddSlider('Smoothing', {Text = 'Smoothing', Default = 5, Min = 1, Max = 20})
+ToggleGroup:AddLabel('Menu Keybind'):AddKeyPicker('MenuKeybind', {
+    Default = 'RightControl', -- 우측 컨트롤 키로 껐다 켜기
+    NoUI = true,
+    Text = 'Menu Keybind'
+})
 
-local MoveGroup = Tabs.Movement:AddLeftGroupbox('Movement')
-MoveGroup:AddToggle('AntiAim', {Text = 'Spinbot'})
-MoveGroup:AddSlider('SpinSpeed', {Text = 'Spin Speed', Default = 25, Min = 1, Max = 50})
+Library.ToggleKeybind = Options.MenuKeybind -- 이 설정으로 키 한번 누르면 껐다 켜짐
 
--- [5] 플랫폼별 입력 처리 (모바일/PC 구분)
-rs.RenderStepped:Connect(function()
-    pcall(function()
-        if Toggles.AntiAim.Value and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            -- 모바일과 PC 모두 CFrame 연산은 동일하게 지원됨
-            local hrp = lp.Character.HumanoidRootPart
-            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(Options.SpinSpeed.Value), 0)
+-- [4] 기능 탭 생성
+local CombatTab = Window:AddTab('Combat')
+local MoveTab = Window:AddTab('Movement')
+
+-- [5] 모든 기능이 담긴 로직 루프 (Fail-safe 바이패스)
+local function RegisterFeature(name, func)
+    rs.RenderStepped:Connect(function()
+        if Toggles[name] and Toggles[name].Value then
+            local success, err = pcall(func)
+            if not success then warn("Bypassing error: " .. tostring(err)) end
         end
     end)
+end
+
+-- 기능 구현
+local CombatGroup = CombatTab:AddLeftGroupbox('Aim & Attack')
+CombatGroup:AddToggle('AimEnabled', {Text = 'All Head Aimbot'})
+CombatGroup:AddDropdown('AimMode', {Values = {'Legit', 'Rage'}, Default = 2, Text = 'Mode'})
+
+local MoveGroup = MoveTab:AddLeftGroupbox('Physics')
+MoveGroup:AddToggle('AntiAim', {Text = 'Spinbot'})
+MoveGroup:AddSlider('SpinSpeed', {Text = 'Spin Speed', Default = 25, Min = 1, Max = 50})
+MoveGroup:AddToggle('Slingshot', {Text = 'Slingshot Velocity'})
+
+RegisterFeature('AimEnabled', function()
+    -- 올 헤드 타겟팅 로직 (pcall 내장)
+    -- 여기에 타겟팅 상세 코드 삽입
 end)
 
--- [6] 설정 관리 (공통)
+RegisterFeature('AntiAim', function()
+    lp.Character.HumanoidRootPart.CFrame = lp.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(Options.SpinSpeed.Value), 0)
+end)
+
+-- [6] 저장 및 테마 동기화
 SaveManager:SetLibrary(Library)
+SaveManager:SetFolder('RivalsElite_Master')
 ThemeManager:SetLibrary(Library)
-SaveManager:SetFolder('RivalsElite_Universal')
-SaveManager:BuildConfigSection(Tabs.Settings)
-ThemeManager:ApplyToTab(Tabs.Settings)SaveManager:LoadAutoloadConfig()
+SaveManager:BuildConfigSection(SettingsTab)
+ThemeManager:ApplyToTab(SettingsTab)
+SaveManager:LoadAutoloadConfig()
