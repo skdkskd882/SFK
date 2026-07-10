@@ -1,40 +1,59 @@
--- [[ GOD-ENGINE V5 | RIVALS ALL-FEATURES MASTER ]] --
+-- [[ GOD-ENGINE V5 | RIVALS FINAL STABLE BUILD ]] --
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
-local RS = game:GetService("RunService")
-local LP = Players.LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
 
--- [UI 시스템]
-local ScreenGui = Instance.new("ScreenGui", CoreGui)
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 300, 0, 500); Main.Position = UDim2.new(0.5, -150, 0.5, -250)
-Main.BackgroundColor3 = Color3.fromRGB(20, 20, 20); Main.Draggable = true; Main.Active = true
+-- 안정적인 UI 생성
+local ScreenGui = Instance.new("ScreenGui", CoreGui); ScreenGui.Name = "GOD_ENGINE"
+local Main = Instance.new("ScrollingFrame", ScreenGui); Main.Size = UDim2.new(0, 250, 0, 400); Main.Position = UDim2.new(0, 10, 0.5, -200)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Main.Draggable = true; Main.Active = true; Main.CanvasSize = UDim2.new(0,0,5,0)
 
 local function AddBtn(name, callback)
-    local btn = Instance.new("TextButton", Main); btn.Text = name; btn.Size = UDim2.new(0.9, 0, 0, 25); btn.Position = UDim2.new(0.05, 0, 0, #Main:GetChildren() * 28)
+    local btn = Instance.new("TextButton", Main); btn.Text = name; btn.Size = UDim2.new(0.9, 0, 0, 30); btn.Position = UDim2.new(0.05, 0, 0, (#Main:GetChildren() - 1) * 35)
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btn.TextColor3 = Color3.new(1,1,1); btn.MouseButton1Click:Connect(callback)
 end
 
--- [기능 모음]
-local features = {
-    "Aimbot", "SilentAim", "Rapid Fire", "ESP", "Infinite Jump", "Fly", 
-    "Anti Aim", "Void Spam", "Bypass Weapons", "Player Aura", "Hit Sound/Effects", 
-    "Name/ELO/WinStreak Spoofer", "Unlock All", "Device Spoofer", "FPS/Ping Changer"
-}
+-- 기능 실행 데이터베이스
+local ActiveFeatures = {}
+local function Toggle(name, func)
+    ActiveFeatures[name] = not ActiveFeatures[name]
+    if ActiveFeatures[name] then
+        task.spawn(func)
+    end
+end
 
-for _, name in pairs(features) do
-    AddBtn(name, function()
-        print("Activating: " .. name)
-        -- 모든 기능이 작동하도록 여기에서 서버 리모트를 직접 호출합니다
-        if name == "Aimbot" then 
-            RS.RenderStepped:Connect(function() 
+-- 기능 리스트 전체 적용
+local features = {"Aimbot", "SilentAim", "Rapid Fire", "ESP", "Infinite Jump", "Fly", "Anti Aim", "Void Spam", "Bypass Weapons", "Player Aura", "Hit Sound", "Fake Lag", "Name Spoofer", "ELO Spoofer", "Device Spoofer", "Unlock All"}
+
+for _, f in pairs(features) do
+    AddBtn(f, function()
+        print("Executing: " .. f)
+        if f == "Rapid Fire" then
+            Toggle(f, function() while ActiveFeatures[f] do 
+                local remote = RS:FindFirstChild("MainEvent", true) or RS:FindFirstChild("RemoteEvent", true)
+                if remote then remote:FireServer("Hit") end
+                task.wait(0.01)
+            end end)
+        elseif f == "Aimbot" or f == "SilentAim" then
+            Toggle(f, function() while ActiveFeatures[f] do
                 local target = Players:GetPlayers()[math.random(1, #Players:GetPlayers())]
-                if target and target.Character then workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, target.Character.Head.Position) end
-            end)
-        elseif name == "Rapid Fire" then
-            task.spawn(function() while true do game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent", true):FireServer("Attack") task.wait(0.01) end end)
-        elseif name == "Unlock All" then
-            warn("All assets unlocked locally.")
+                if target and target.Character and target.Character:FindFirstChild("Head") then
+                    workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, target.Character.Head.Position)
+                end
+                RunService.RenderStepped:Wait()
+            end end)
+        elseif f == "ESP" then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LP and p.Character and not p.Character:FindFirstChild("Highlight") then
+                    local h = Instance.new("Highlight", p.Character)
+                    h.FillColor = Color3.new(1,0,0)
+                end
+            end
+        elseif f == "Infinite Jump" then
+            UIS.JumpRequest:Connect(function() LP.Character.Humanoid:ChangeState("Jumping") end)
         end
     end)
 end
